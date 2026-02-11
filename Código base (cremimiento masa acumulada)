@@ -1,0 +1,267 @@
+%Código Base: Estimación de tasas de crecimiento y muerte en cepas de Kluyveromyces marxianus
+
+%Objetivo: Implementar un algoritmo que permita calcular las tasas de crecimiento y muerte en datos experimentales de biomasa en una fermentación alcohólica.
+%Datos de la simulación
+clc; clear; close all; warning('off','all'); format shortENG
+sys = readmatrix("data.csv");
+to = sys(:,1);
+xo = sys(:,2:end);
+strains = {'CBS397'; 'ITD002'; 'ITD00157'; 'ITD00268'; 'CBS6556'};
+T = array2table(sys, 'VariableNames',{'t [days]', 'CBS397-A','CBS397-B','ITD002-A','ITD002-B'...
+    'ITD00157-A','ITD00157-B','ITD00268-A','ITD00268-B','CBS6556-A','CBS6556-B'});
+fprintf('Datos experimentales de biomasa en cinco cepas de K. marxianus [g/L] \n\n'); disp(T)
+xp = zeros(size(to,1),size(xo,2)/2);
+for i = 1:size(xo,2)/2
+    xa = xo(:,2*i-1);
+    xb = xo(:,2*i);
+    xp(:,i) = (xa + xb)/2;
+end
+Tp = array2table([to,xp], 'VariableNames',{'t [days]', 'CBS397','ITD002',...
+    'ITD00157','ITD00268','CBS6556'});
+fprintf('Datos experimentales de biomasa en cinco cepas de K. marxianus [g/L] \n\n'); disp(Tp)
+Datos experimentales promediados
+plotdata(to,xp)
+
+%Regresion no lineal
+Strains = ['strain 1';'strain 1';'strain 1';...
+           'strain 2';'strain 2';'strain 2';...
+           'strain 3';'strain 3';'strain 3';...
+           'strain 4';'strain 4';'strain 4';...
+           'strain 5';'strain 5';'strain 5'];
+
+Parameters = ['a';'b';'m';...
+              'a';'b';'m';...
+              'a';'b';'m';...
+              'a';'b';'m';...
+              'a';'b';'m'];
+
+p0 = [10;1;0.001];
+alpha = 0.05;
+estimate = zeros(length(p0),min(size(xp)));
+SE = zeros(length(Parameters),1);
+CI95 = zeros(length(Parameters),2);
+Pvalue = zeros(length(Parameters),1);
+AIC = zeros(min(size(xp)),1);
+R2 = zeros(min(size(xp)),1);
+integral0 = 0;
+
+for s = 1:5
+    xs = xp(:,s);
+    mdl = fitting_model(to,xs,integral0,p0);
+    estimate(:,s) = table2array(mdl.Coefficients(:,1));
+    SE(find(SE == 0,1,"first"):find(SE == 0,1,"first")+2,1) = table2array(mdl.Coefficients(:,2));
+    CI95(find(CI95 == 0,1,'first'):find(CI95 == 0,1,'first')+2,:) = coefCI(mdl,alpha);
+    Pvalue(find(Pvalue == 0,1,"first"):find(Pvalue == 0,1,"first")+2,1) = mdl.Coefficients.pValue;
+    AIC(s,1) = mdl.ModelCriterion.AICc;
+    R2(s,1) = mdl.Rsquared.Adjusted;
+end
+dof = mdl.DFE;
+tval = tinv(1-alpha/2,dof);
+MoE = SE.*tval;
+Estimate = reshape(estimate,[],1);...
+fprintf(['\nSample size (n): ', num2str(length(xp(:,1)))]);...
+fprintf(['\nParameters to be estimated (pars): ', num2str(numel(p0))]);...
+fprintf(['\nDegrees of freedom (dof): ', num2str(dof)]);...
+fprintf(['\nSignificance level (alpha): ', num2str(alpha)]);...
+fprintf(['\nt-Student value (tval): ', num2str(tval)]);...
+disp(table(Strains, Parameters, Estimate, SE, MoE, CI95, Pvalue));
+disp(table(strains,AIC));...
+disp(table(strains,R2));
+Experimentacion in silico
+for i = 1:5
+    xa (:,i) = systemKM(to,xp(1,i), estimate(:,1), integral0);
+end
+
+plotresults(to,xp,xa)
+%Modelo Matemático para la regresion no lineal...
+function mdl = fitting_model(to,xo,integral0,p0)
+
+    function xa = model(p,t)
+        a = p(1); b = p(2); m = p(3);
+        dt = 1E-2;
+        tend = max(t);
+        time = (0:dt:tend)';
+        n = round(tend/dt);
+        x = zeros(n+1,1); x(1) = xo(1);
+        I = zeros(n+1,1); I(1) = integral0;
+        
+        for i = 1:n
+            [fx,fI] = f(x(i),I(i));
+            xn = x(i) + fx*dt;
+            In = I(i) + fI*dt;
+            [fxn,fIn] = f(xn,In);
+            x(i+1) = x(i) + dt*(fx + fxn)/2;
+            I(i+1) = I(i) + dt*(fI + fIn)/2;
+        end
+        
+        function [dx,dI] = f(x,I)
+            dx = a*x*exp(-b*I) - m*x;
+            dI = x;
+        end
+
+        xa = zeros(length(t),1);
+        for i = 1:length(t)
+            j = abs(time - t(i)) < 1E-9;
+            xa(i) = x(j);
+        end
+    end
+
+    mdl = fitnlm(to,xo,@model,p0);
+end
+
+
+function xa = systemKM(t,xo,p,integral0)
+        a = p(1); b = p(2); m = p(3);
+        dt = 1E-2;
+        tend = max(t);
+        time = (0:dt:tend)';
+        n = round(tend/dt);
+        x = zeros(n+1,1); x(1) = xo(1);
+        I = zeros(n+1,1); I(1) = integral0;
+        
+        for i = 1:n
+            [fx,fI] = f(x(i),I(i));
+            xn = x(i) + fx*dt;
+            In = I(i) + fI*dt;
+            [fxn,fIn] = f(xn,In);
+            x(i+1) = x(i) + dt*(fx + fxn)/2;
+            I(i+1) = I(i) + dt*(fI + fIn)/2;
+        end
+        
+        function [dx,dI] = f(x,I)
+            dx = a*x*exp(-b*I) - m*x;
+            dI = x;
+        end
+
+        xa = zeros(length(t),1);
+        for i = 1:length(t)
+            j = abs(time - t(i)) < 1E-9;
+            xa(i) = x(j);
+        end
+    end
+%Funciones 
+function plotdata(t,xp)
+    set(figure(),'Color','k')
+    set(gcf,'units','centimeters','position', [2 2 18 24])
+    color1 = [0 0.7 0];
+    color2 = [111, 0, 255]/255;
+    color3 = [233, 179, 251]/255;
+    color4 = [0.7 0 0];
+    color5 = [0 0 0.7];
+
+    subplot(5,1,1); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,1),'x','LineWidth',1,'MarkerSize',4,'Color',color1)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $CBS397$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+
+    subplot(5,1,2); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,2),'x','LineWidth',1,'MarkerSize',4,'Color',color2)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $ITD002$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+
+    subplot(5,1,3); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,3),'x','LineWidth',1,'MarkerSize',4,'Color',color3)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $ITD00157$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+
+    subplot(5,1,4); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,4),'x','LineWidth',1,'MarkerSize',4,'Color',color4)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $ITD00268$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+
+    subplot(5,1,5); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,5),'x','LineWidth',1,'MarkerSize',4,'Color',color5)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $CBS6556$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+end
+
+function plotresults(t,xp,xa)
+    set(figure(),'Color','k')
+    set(gcf,'units','centimeters','position', [2 2 18 24])
+    color1 = [0 0.7 0];
+    color2 = [111, 0, 255]/255;
+    color3 = [233, 179, 251]/255;
+    color4 = [0.7 0 0];
+    color5 = [0 0 0.7];
+    gry = [0.5 0.5 0.5];
+
+    subplot(5,1,1); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,1),'x','LineWidth',1,'MarkerSize',4,'Color',color1)
+    plot(t,xa(:,1),'-o','LineWidth',1,'MarkerSize',4,'Color',gry)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $CBS397$', '$x_a(t)$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+
+    subplot(5,1,2); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,2),'x','LineWidth',1,'MarkerSize',4,'Color',color2)
+    plot(t,xa(:,2),'-o','LineWidth',1,'MarkerSize',4,'Color',gry)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $ITD002$', '$x_a(t)$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+
+    subplot(5,1,3); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,3),'x','LineWidth',1,'MarkerSize',4,'Color',color3)
+    plot(t,xa(:,3),'-o','LineWidth',1,'MarkerSize',4,'Color',gry)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $ITD00157$', '$x_a(t)$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+
+    subplot(5,1,4); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,4),'x','LineWidth',1,'MarkerSize',4,'Color',color4)
+    plot(t,xa(:,4),'-o','LineWidth',1,'MarkerSize',4,'Color',gry)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $ITD00268$', '$x_a(t)$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+
+    subplot(5,1,5); grid off; hold on; box on; fontsize(10,'points')
+    plot(t,xp(:,5),'x','LineWidth',1,'MarkerSize',4,'Color',color5)
+    plot(t,xa(:,5),'-o','LineWidth',1,'MarkerSize',4,'Color',gry)
+    xlim([-1 84]); xticks(0:4:84)
+    ylim([0 3]); yticks(0:1:3)
+    xlabel('$t$ $[days]$','Interpreter','latex')
+    ylabel('$Biomass$ $[g/L]$','Interpreter','latex')
+    L = legend('$Strain:$ $CBS6556$', '$x_a(t)$');
+    set(L,'Interpreter','latex','Location','SouthEast','Box','off')
+    set(gca,'FontName','Times New Roman')
+end
