@@ -1,0 +1,1940 @@
+classdef Proyecto_Final < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                        matlab.ui.Figure
+        GridLayout                      matlab.ui.container.GridLayout
+        RSSEditField                    matlab.ui.control.NumericEditField
+        RSSEditFieldLabel               matlab.ui.control.Label
+        ValorAlphaEditField             matlab.ui.control.NumericEditField
+        ValorAlphaEditFieldLabel        matlab.ui.control.Label
+        GradosdeLibertadEditField       matlab.ui.control.NumericEditField
+        GradosdeLibertadEditFieldLabel  matlab.ui.control.Label
+        ValortstudentEditField          matlab.ui.control.NumericEditField
+        ValortstudentEditFieldLabel     matlab.ui.control.Label
+        CI95EditField_6                 matlab.ui.control.NumericEditField
+        CI95EditField_6Label            matlab.ui.control.Label
+        CI95EditField_5                 matlab.ui.control.NumericEditField
+        CI95Label_4                     matlab.ui.control.Label
+        CI95EditField_4                 matlab.ui.control.NumericEditField
+        CI95Label_3                     matlab.ui.control.Label
+        CI95EditField_3                 matlab.ui.control.NumericEditField
+        CI95EditField_3Label            matlab.ui.control.Label
+        MargendeErrorEditField_3        matlab.ui.control.NumericEditField
+        MargendeErrorEditField_3Label   matlab.ui.control.Label
+        MargendeErrorEditField_2        matlab.ui.control.NumericEditField
+        MargendeErrorEditField_2Label   matlab.ui.control.Label
+        ValorPEditField_3               matlab.ui.control.NumericEditField
+        ValorPEditField_3Label          matlab.ui.control.Label
+        ValorPEditField_2               matlab.ui.control.NumericEditField
+        ValorPEditField_2Label          matlab.ui.control.Label
+        ErrorEstndarEditField_3         matlab.ui.control.NumericEditField
+        ErrorEstndarEditField_3Label    matlab.ui.control.Label
+        ErrorEstndarEditField_2         matlab.ui.control.NumericEditField
+        ErrorEstndarEditField_2Label    matlab.ui.control.Label
+        IncluirTasadeMuerteCheckBox     matlab.ui.control.CheckBox
+        ImprimirResultadosButton        matlab.ui.control.Button
+        bEditField                      matlab.ui.control.NumericEditField
+        bEditFieldLabel                 matlab.ui.control.Label
+        CI95EditField_2                 matlab.ui.control.NumericEditField
+        CI95Label_2                     matlab.ui.control.Label
+        mEditField                      matlab.ui.control.NumericEditField
+        mEditFieldLabel                 matlab.ui.control.Label
+        RCuadradaEditField              matlab.ui.control.NumericEditField
+        RCuadradaEditFieldLabel         matlab.ui.control.Label
+        AICEditField                    matlab.ui.control.NumericEditField
+        AICEditFieldLabel               matlab.ui.control.Label
+        CI95EditField                   matlab.ui.control.NumericEditField
+        CI95Label                       matlab.ui.control.Label
+        ValorPEditField                 matlab.ui.control.NumericEditField
+        ValorPEditFieldLabel            matlab.ui.control.Label
+        MargendeErrorEditField          matlab.ui.control.NumericEditField
+        MargendeErrorEditFieldLabel     matlab.ui.control.Label
+        ErrorEstndarEditField           matlab.ui.control.NumericEditField
+        ErrorEstndarEditFieldLabel      matlab.ui.control.Label
+        aEditField                      matlab.ui.control.NumericEditField
+        aEditFieldLabel                 matlab.ui.control.Label
+        CepasdeKmarxianusDropDown       matlab.ui.control.DropDown
+        CepasdeKmarxianusDropDownLabel  matlab.ui.control.Label
+        AlomtricofractalButton          matlab.ui.control.Button
+        CrecimientoLogsticoButton       matlab.ui.control.Button
+        CrecimientodeGompertzButton     matlab.ui.control.Button
+        CrecimientoGompertzsimplificadaButton  matlab.ui.control.Button
+        AlomtricoesferaButton           matlab.ui.control.Button
+        CrecimientoconmasaacumuladaButton  matlab.ui.control.Button
+        UIAxes                          matlab.ui.control.UIAxes
+    end
+
+    
+    properties (Access = public)
+        DatosIniciales
+        CepasPromedio
+        DatosSeleccionados
+        TabladeResultados table
+    end
+    
+    properties (Access = private)
+        ModeloSeleccionado string = ""
+    end
+    
+    methods (Access = private)
+        function Inicial(app)
+            app.DatosIniciales = readmatrix("data.csv");
+            
+            to = app.DatosIniciales(:,1);  % vector de tiempo
+        
+            % Número de columnas de datos (excluyendo la columna de tiempo)
+            xo = app.DatosIniciales(:,2:end);
+        
+            % Crear matriz para promedios
+            xp = zeros(size(to,1), size(xo,2)/2);
+        
+            % Promediar pares de columnas consecutivas
+            for i = 1:size(xo,2)/2
+                xa = xo(:,2*i-1);
+                xb = xo(:,2*i);
+                xp(:,i) = (xa + xb)/2;
+            end
+        
+            % Guardar datos promediados en la app
+            app.CepasPromedio.CBS397.t = to;
+            app.CepasPromedio.CBS397.y = xp(:,1);
+        
+            app.CepasPromedio.ITD002.t = to;
+            app.CepasPromedio.ITD002.y = xp(:,2);
+        
+            app.CepasPromedio.ITD00157.t = to;
+            app.CepasPromedio.ITD00157.y = xp(:,3);
+        
+            app.CepasPromedio.ITD00268.t = to;
+            app.CepasPromedio.ITD00268.y = xp(:,4);
+        
+            app.CepasPromedio.CBS6556.t = to;
+            app.CepasPromedio.CBS6556.y = xp(:,5);
+        end
+%////////////////////////////////////////////////////////////////////
+%       Con muerte
+        function mdl = fitting_modelKM(app, t, y, x0, integral0, p0)
+
+            model_fun = @(p,t) model(p, t, x0, integral0);
+        
+            function xa = model(p, t, xdata, I0)
+                a = p(1); b = p(2); m = p(3);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = xdata; 
+                I = zeros(n+1,1); I(1) = I0;
+        
+                for i = 1:n
+                    [fx, fI] = f(x(i), I(i));
+                    xn = x(i) + fx*dt;
+                    In = I(i) + fI*dt;
+                    [fxn, fIn] = f(xn, In);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                    I(i+1) = I(i) + dt*(fI + fIn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function [dx, dI] = f(x, I)
+                    dx = a*x*exp(-b*I) - m*x;
+                    dI = x;
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%--------------------------------------------------------------
+        function xa = systemKM(app, t, xo, p, integral0)
+            a = p(1); b = p(2); m = p(3);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+            I = zeros(n+1,1); I(1) = integral0;
+        
+            for i = 1:n
+                [fx,fI] = f(x(i), I(i));
+                xn = x(i) + fx*dt;
+                In = I(i) + fI*dt;
+                [fxn,fIn] = f(xn, In);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+                I(i+1) = I(i) + dt*(fI+fIn)/2;
+            end
+        
+            function [dx,dI] = f(x,I)
+                dx = a*x*exp(-b*I) - m*x;
+                dI = x;
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%===============================================================
+%       Sin muerte
+        function mdl = fitting_modelKM_sinmuerte(app, t, y, x0, integral0, p0)
+
+            model_fun = @(p,t) model(p, t, x0, integral0);
+        
+            function xa = model(p, t, xdata, I0)
+                a = p(1); b = p(2);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = xdata; 
+                I = zeros(n+1,1); I(1) = I0;
+        
+                for i = 1:n
+                    [fx, fI] = f(x(i), I(i));
+                    xn = x(i) + fx*dt;
+                    In = I(i) + fI*dt;
+                    [fxn, fIn] = f(xn, In);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                    I(i+1) = I(i) + dt*(fI + fIn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function [dx, dI] = f(x, I)
+                    dx = a*x*exp(-b*I);
+                    dI = x;
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        function xa = systemKM_sinmuerte(app, t, xo, p, integral0)
+            a = p(1); b = p(2);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+            I = zeros(n+1,1); I(1) = integral0;
+        
+            for i = 1:n
+                [fx,fI] = f(x(i), I(i));
+                xn = x(i) + fx*dt;
+                In = I(i) + fI*dt;
+                [fxn,fIn] = f(xn, In);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+                I(i+1) = I(i) + dt*(fI+fIn)/2;
+            end
+        
+            function [dx,dI] = f(x,I)
+                dx = a*x*exp(-b*I);
+                dI = x;
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%///////////////////////////////////////////////////////////////
+%       Sin muerte
+        function mdl = fitting_modelLogistico(app, t,y,p0)
+            
+            model_fun = @(p,t) modelLogistico(p, t, y);
+
+            function xa = modelLogistico(p, t, xdata)
+                a = p(1); b = p(2);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = xdata(1); 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a*x*(1-x/b);
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%-----------------------------------------------------------
+        function xa = systemLogistico(app, t, xo, p)
+            a = p(1); b = p(2);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a*x*(1-x/b);
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%============================================================
+%       Con muerte
+        function mdl = fitting_modelLogisticoconmuerte(app, t,y,p0)
+            
+            model_fun = @(p,t) modelLogisticoconmuerte(p, t, y);
+
+            function xa = modelLogisticoconmuerte(p, t, xdata)
+                a = p(1); b = p(2); m = p(3);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = xdata(1); 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a*x*(1-x/b) - m*x;
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        function xa = systemLogisticoconmuerte(app, t, xo, p)
+            a = p(1); b = p(2); m = p(3);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a*x*(1-x/b) - m*x;
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%////////////////////////////////////////////////////////////
+%       Sin muerte
+        function mdl = fitting_modelGompertz(app, t,y,p0)
+            
+            model_fun = @(p,t) modelGompertz(p, t, y);
+
+            function xa = modelGompertz(p, t, xdata)
+                a = p(1); b = p(2);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = xdata(1); 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a * x - b*x * log(x);
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%-----------------------------------------------------------
+        function xa = systemGompertz(app, t, xo, p)
+            a = p(1); b = p(2);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a * x - b*x * log(x);
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%============================================================
+%       Con muerte
+        function mdl = fitting_modelGompertzconmuerte(app, t,y,p0)
+            
+            model_fun = @(p,t) modelGompertzconmuerte(p, t, y);
+
+            function xa = modelGompertzconmuerte(p, t, xdata)
+                a = p(1); b = p(2); m = p(3);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = xdata(1); 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a * x - b*x * log(x) - m*x;
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        function xa = systemGompertzconmuerte(app, t, xo, p)
+            a = p(1); b = p(2); m = p(3);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a * x - b*x * log(x) - m*x;
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%////////////////////////////////////////////////////////////
+%       Sin muerte
+        function mdl = fitting_modelGompertzSimplificada(app, t,y,p0)
+            
+            model_fun = @(p,t) modelGompertzSimplificada(p, t, y);
+
+            function xa = modelGompertzSimplificada(p, t, xdata)
+                a = p(1); b = p(2);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = xdata(1); 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a * x * log(b/x);
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%-----------------------------------------------------------
+        function xa = systemGompertzSimplificada(app, t, xo, p)
+            a = p(1); b = p(2);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a * x * log(b/x);
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%============================================================
+%       Con muerte
+        function mdl = fitting_modelGompertzSimplificadaconmuerte(app, t,y,p0)
+            
+            model_fun = @(p,t) modelGompertzSimplificadaconmuerte(p, t, y);
+
+            function xa = modelGompertzSimplificadaconmuerte(p, t, xdata)
+                a = p(1); b = p(2); m = p(3);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = xdata(1); 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a * x * log(b/x) - m*x;
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        function xa = systemGompertzSimplificadaconmuerte(app, t, xo, p)
+            a = p(1); b = p(2); m = p(3);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a * x * log(b/x) - m*x;
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%//////////////////////////////////////////////////////////
+%       Con muerte
+        function mdl = fitting_modelEsfera(app, t,y,p0)
+            x0 = y(1);
+            model_fun = @(p,t) modelEsfera(p, t, x0);
+
+            function xa = modelEsfera(p, t, x0)
+                a = p(1); b = p(2); m = p(3);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = x0; 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a * x .^ (2/3) * (1 - b * x.^(1/3)) - m * x;
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%---------------------------------------------------------
+        function xa = systemEsfera(app, t, xo, p)
+            a = p(1); b = p(2); m = p(3);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a * x .^ (2/3) * (1 - b * x.^(1/3)) - m * x;
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%============================================================
+%       Sin muerte
+        function mdl = fitting_modelEsferasinmuerte(app, t,y,p0)
+            x0 = y(1);
+            model_fun = @(p,t) modelEsferasinmuerte(p, t, x0);
+
+            function xa = modelEsferasinmuerte(p, t, x0)
+                a = p(1); b = p(2);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = x0; 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a * x .^ (2/3) * (1 - b*x .^ (1/3));
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+function xa = systemEsferasinmuerte(app, t, xo, p)
+            a = p(1); b = p(2);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a * x .^ (2/3) * (1 - b*x .^ (1/3));
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%////////////////////////////////////////////////////////
+%       Con muerte
+        function mdl = fitting_modelFractal(app, t,y,p0)
+            x0 = y(1);
+            model_fun = @(p,t) modelFractal(p, t, x0);
+
+            function xa = modelFractal(p, t, x0)
+                a = p(1); b = p(2); m = p(3);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = x0; 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a * x .^ (3/4) * (1 - b * x .^ (1/4)) - m * x;
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%---------------------------------------------------------
+        function xa = systemFractal(app, t, xo, p)
+            a = p(1); b = p(2); m = p(3);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a * x .^ (3/4) * (1 - b * x .^ (1/4)) - m * x;
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%============================================================
+%       Sin muerte
+        function mdl = fitting_modelFractalsinmuerte(app, t,y,p0)
+            x0 = y(1);
+            model_fun = @(p,t) modelFractalsinmuerte(p, t, x0);
+
+            function xa = modelFractalsinmuerte(p, t, x0)
+                a = p(1); b = p(2);
+        
+                dt = 1E-2;
+                tend = max(t);
+                time = (0:dt:tend)';
+                n = round(tend/dt);
+        
+                x = zeros(n+1,1); x(1) = x0; 
+        
+                for i = 1:n
+                    fx = f(x(i));
+                    xn = x(i) + fx*dt;
+                    fxn = f(xn);
+                    x(i+1) = x(i) + dt*(fx + fxn)/2;
+                end
+        
+                xa = zeros(length(t),1);
+                for i = 1:length(t)
+                    [~, j] = min(abs(time - t(i)));
+                    xa(i) = x(j);
+                end
+        
+                function dx = f(x)
+                    dx = a * x .^ (3/4) * (1 - b * x .^ (1/4));
+                end
+            end
+        
+            mdl = fitnlm(t, y, model_fun, p0);
+        end
+%::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+function xa = systemFractalsinmuerte(app, t, xo, p)
+            a = p(1); b = p(2);
+            dt = 1E-2;
+            tend = max(t);
+            time = (0:dt:tend)';
+            n = round(tend/dt);
+            x = zeros(n+1,1); x(1) = xo(1);
+        
+            for i = 1:n
+                fx = f(x(i));
+                xn = x(i) + fx*dt;
+                fxn = f(xn);
+                x(i+1) = x(i) + dt*(fx+fxn)/2;
+            end
+        
+            function dx = f(x)
+                dx = a * x .^ (3/4) * (1 - b * x .^ (1/4));
+            end
+        
+            xa = zeros(length(t),1);
+            for i = 1:length(t)
+                [~, j] = min(abs(time - t(i)));
+                xa(i) = x(j);
+            end
+        end
+%////////////////////////////////////////////////////////
+        function Resultados(app,mdl)
+            est = mdl.Coefficients.Estimate;
+            SE = mdl.Coefficients.SE;
+            CI = coefCI(mdl,0.05);
+            P = mdl.Coefficients.pValue;
+            RSS = mdl.SSE;
+            % Grados de libertad y t-value
+            dof = mdl.DFE;
+            alpha = 0.05;
+            tval = tinv(1-alpha/2, dof);
+            % Margen de error
+            MoE = SE * tval;
+
+            app.ValorAlphaEditField.Value = alpha;
+            app.ValortstudentEditField.Value = tval;
+            app.GradosdeLibertadEditField.Value = dof;
+            app.RSSEditField.Value = RSS;
+
+            campos = {...
+                app.aEditField, app.bEditField, app.mEditField,...
+                app.ErrorEstndarEditField, app.ErrorEstndarEditField_2, app.ErrorEstndarEditField_3,...
+                app.MargendeErrorEditField, app.MargendeErrorEditField_2, app.MargendeErrorEditField_3,...
+                app.CI95EditField, app.CI95EditField_2, app.CI95EditField_3,...
+                app.CI95EditField_4, app.CI95EditField_5, app.CI95EditField_6,...
+                app.ValorPEditField, app.ValorPEditField_2, app.ValorPEditField_3};
+
+            for k = 1:numel(campos)
+                campos{k}.Value = 0;
+                campos{k}.Enable = 'off';
+            end
+            
+            app.MargendeErrorEditField.Value = MoE(1);
+            app.aEditField.Value = est(1);
+            app.ErrorEstndarEditField.Value = SE(1);
+            if isnan(CI(1,1))
+                IC1 = est(1) - MoE(1);
+                IC2 = est(1) + MoE(1);
+                app.CI95EditField.Value = IC1;
+                app.CI95EditField_2.Value = IC2;
+                app.CI95EditField.Enable = 'on';
+                app.CI95EditField_2.Enable = 'on';
+            else
+                app.CI95EditField.Value = CI(1,1);
+                app.CI95EditField_2.Value = CI(1,2);
+                app.CI95EditField.Enable = 'on';
+                app.CI95EditField_2.Enable = 'on';
+            end
+            app.ValorPEditField.Value = P(1);
+            app.MargendeErrorEditField.Enable = 'on';
+            app.MargendeErrorEditField.Enable = 'on';
+            app.aEditField.Enable = 'on';
+            app.ErrorEstndarEditField.Enable = 'on';
+            app.ValorPEditField.Enable = 'on';
+            app.MargendeErrorEditField.Enable = 'on';
+            
+
+            if length(est) >= 2                
+                app.bEditField.Value = est(2);
+                app.ErrorEstndarEditField_2.Value = SE(2);
+                if isnan(CI(2,1))
+                    IC3 = est(2) - MoE(2);
+                    IC4 = est(2) + MoE(2);
+                    app.CI95EditField_3.Value = IC3;
+                    app.CI95EditField_4.Value = IC4;
+                    app.CI95EditField_3.Enable = 'on';
+                    app.CI95EditField_4.Enable = 'on';
+                else
+                    app.CI95EditField_3.Value = CI(2,1);
+                    app.CI95EditField_4.Value = CI(2,2);
+                    app.CI95EditField_3.Enable = 'on';
+                    app.CI95EditField_4.Enable = 'on';
+                end
+                app.ValorPEditField_2.Value = P(2);
+                app.MargendeErrorEditField_2.Value = MoE(2);
+                app.bEditField.Enable = 'on';
+                app.ErrorEstndarEditField_2.Enable = 'on';
+                app.ValorPEditField_2.Enable = 'on';
+                app.MargendeErrorEditField_2.Enable = 'on';
+            end
+
+             if length(est) >= 3
+                app.mEditField.Value = est(3);
+                app.ErrorEstndarEditField_3.Value = SE(3);
+                app.ValorPEditField_3.Value = P(3);
+                app.MargendeErrorEditField_3.Value = MoE(3);
+                if isnan(CI(3,1))
+                    IC5 = est(3) - MoE(3);
+                    IC6 = est(3) + MoE(3);
+                    app.CI95EditField_5.Value = IC5;
+                    app.CI95EditField_6.Value = IC6;
+                    app.CI95EditField_5.Enable = 'on';
+                    app.CI95EditField_6.Enable = 'on';
+                else
+                    app.CI95EditField_5.Value = CI(3,1);
+                    app.CI95EditField_6.Value = CI(3,2);
+                    app.CI95EditField_5.Enable = 'on';
+                    app.CI95EditField_6.Enable = 'on';
+                end
+                app.mEditField.Enable                = 'on';
+                app.ErrorEstndarEditField_3.Enable   = 'on';
+                app.MargendeErrorEditField_3.Enable  = 'on';
+                app.ValorPEditField_3.Enable         = 'on';
+             end
+             app.AICEditField.Value = mdl.ModelCriterion.AICc;
+             app.RCuadradaEditField.Value = mdl.Rsquared.Adjusted;
+        end
+%///////////////////////////////////////////////////////////////////
+        function s = fmt(app, x)
+
+            if ~isfinite(x)
+                s = "NaN";
+                return
+            end
+        
+            if x == 0
+                s = "0";
+                return
+            end
+        
+            ax = abs(x);
+        
+            % Umbrales de notación científica
+            if ax < 1e-4 || ax >= 1e4
+                s = sprintf('%.3e', x);   % científica solo si es necesario
+            else
+                s = sprintf('%.6f', x);   % decimal normal
+                s = strip(s,'right','0'); % quita ceros innecesarios
+                s = strip(s,'right','.');
+            end
+        end
+
+    end
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            Inicial(app)
+            app.UIAxes.XLim = [0 85];
+            app.UIAxes.YLim = [0 3];
+            app.UIAxes.Color = 'k';
+            app.UIAxes.Title.Color = 'w';
+            app.UIAxes.XLabel.Color = 'w';
+            app.UIAxes.YLabel.Color = 'w';
+            app.UIAxes.XColor = 'w';           
+            app.UIAxes.YColor = 'w';
+            app.UIAxes.GridColor = 'w';
+            grid(app.UIAxes,'on');
+        end
+
+        % Value changed function: CepasdeKmarxianusDropDown
+        function CepasdeKmarxianusDropDownValueChanged(app, event)
+            switch app.CepasdeKmarxianusDropDown.Value
+                case 'CBS397'
+                    datos = app.CepasPromedio.CBS397;
+                 case 'ITD002'
+                    datos = app.CepasPromedio.ITD002;
+                 case 'ITD00157'
+                    datos = app.CepasPromedio.ITD00157;
+                 case 'ITD00268'
+                    datos = app.CepasPromedio.ITD00268;
+                 case 'CBS6556'
+                    datos = app.CepasPromedio.CBS6556;
+            end
+
+            t = datos.t;
+            y = datos.y;
+            
+            cla(app.UIAxes)
+
+            plot(app.UIAxes,t,y,'o','DisplayName','Datos experimentales')
+            legend(app.UIAxes, 'show','Location','southeast')
+        end
+
+        % Button pushed function: CrecimientoconmasaacumuladaButton
+        function CrecimientoconmasaacumuladaButtonPushed(app, event)
+            app.ModeloSeleccionado = "Crecimiento con Masa Acumulada";
+
+            datos = app.CepasPromedio.(app.CepasdeKmarxianusDropDown.Value);
+            t = datos.t;
+            y = datos.y;
+        
+            % Valores iniciales para regresión no lineal
+            integral0 = 0;
+
+            if app.IncluirTasadeMuerteCheckBox.Value
+                p0 = [10; 1; 0.001];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelKM(t, y, y(1), integral0, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b;m]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemKM(t, y(1), estimate, integral0);
+                app.mEditField.Enable = "on";
+                app.mEditField.Value = estimate(3);
+            else
+                p0 = [10; 1];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelKM_sinmuerte(t, y, y(1), integral0, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemKM_sinmuerte(t, y(1), estimate, integral0);
+                app.mEditField.Value = 0;
+                app.mEditField.Enable = "off";
+            end
+        
+            % Llenar los campos de la interfaz
+            Resultados(app, mdl)
+        
+            % Graficar resultados
+            cla(app.UIAxes)  % Limpiar la gráfica antes de dibujar
+            hold(app.UIAxes,'on')
+            plot(app.UIAxes, t, y, 'o', 'MarkerFaceColor','b', 'DisplayName','Datos experimentales')
+            plot(app.UIAxes, t, xa, '-r', 'LineWidth', 2, 'DisplayName','Modelo ajustado')
+            xlabel(app.UIAxes, 'Tiempo [días]')
+            ylabel(app.UIAxes, 'Biomasa [g/L]')
+            cepa = app.CepasdeKmarxianusDropDown.Value;
+                if app.ModeloSeleccionado == ""
+                    uialert(app.UIFigure,...
+                        'Favor de seleccionar un modelo antes de imprimir.',...
+                        'Modelo no seleccionado');
+                    return
+                end
+            
+                if app.IncluirTasadeMuerteCheckBox.Value
+                    muerteTxt = "con muerte";
+                else
+                    muerteTxt = "sin muerte";
+                end
+            
+                titulo = sprintf('%s - %s (%s)',...
+                    cepa, app.ModeloSeleccionado, muerteTxt);
+                title(app.UIAxes, titulo,...
+                    'FontSize',14, 'FontWeight','bold');
+            legend(app.UIAxes,'show','Location','southeast')
+            hold(app.UIAxes,'off')
+        end
+
+        % Button pushed function: CrecimientoLogsticoButton
+        function CrecimientoLogsticoButtonPushed(app, event)
+            app.ModeloSeleccionado = "Crecimiento Logístico";
+            
+            datos = app.CepasPromedio.(app.CepasdeKmarxianusDropDown.Value);
+            t = datos.t;
+            y = datos.y;
+
+            if app.IncluirTasadeMuerteCheckBox.Value
+                p0 = [9.8; 1; 0.1];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelLogisticoconmuerte(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b;m]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemLogisticoconmuerte(t, y(1), estimate);
+                app.mEditField.Enable = "on";
+                app.mEditField.Value = estimate(3);
+            else
+                p0 = [10; 1];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelLogistico(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemLogistico(t, y(1), estimate);
+                app.mEditField.Value = 0;
+                app.mEditField.Enable = "off";
+            end
+        
+            % Llenar los campos de la interfaz
+            Resultados(app, mdl)
+        
+            % Graficar resultados
+            cla(app.UIAxes)  % Limpiar la gráfica antes de dibujar
+            hold(app.UIAxes,'on')
+            plot(app.UIAxes, t, y, 'o', 'MarkerFaceColor','b', 'DisplayName','Datos experimentales')
+            plot(app.UIAxes, t, xa, '-r', 'LineWidth', 2, 'DisplayName','Modelo ajustado')
+            xlabel(app.UIAxes, 'Tiempo [días]')
+            ylabel(app.UIAxes, 'Biomasa [g/L]')
+            cepa = app.CepasdeKmarxianusDropDown.Value;
+                if app.ModeloSeleccionado == ""
+                    uialert(app.UIFigure,...
+                        'Favor de seleccionar un modelo antes de imprimir.',...
+                        'Modelo no seleccionado');
+                    return
+                end
+            
+                if app.IncluirTasadeMuerteCheckBox.Value
+                    muerteTxt = "con muerte";
+                else
+                    muerteTxt = "sin muerte";
+                end
+            
+                titulo = sprintf('%s - %s (%s)',...
+                    cepa, app.ModeloSeleccionado, muerteTxt);
+                title(app.UIAxes, titulo,...
+                    'FontSize',14, 'FontWeight','bold');
+            legend(app.UIAxes,'show','Location','southeast')
+            hold(app.UIAxes,'off')
+        end
+
+        % Button pushed function: CrecimientodeGompertzButton
+        function CrecimientodeGompertzButtonPushed(app, event)
+            app.ModeloSeleccionado = "Crecimiento Gompertz";
+            
+            datos = app.CepasPromedio.(app.CepasdeKmarxianusDropDown.Value);
+            t = datos.t;
+            y = datos.y;
+
+            if app.IncluirTasadeMuerteCheckBox.Value
+                p0 = [10; 1; 0.001];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelGompertzconmuerte(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b;m]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemGompertzconmuerte(t, y(1), estimate);
+                app.mEditField.Enable = "on";
+                app.mEditField.Value = estimate(3);
+            else
+                p0 = [10; 1];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelGompertz(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemGompertz(t, y(1), estimate);
+                app.mEditField.Value = 0;
+                app.mEditField.Enable = "off";
+            end
+        
+            % Llenar los campos de la interfaz
+            Resultados(app, mdl)
+        
+            % Graficar resultados
+            cla(app.UIAxes)  % Limpiar la gráfica antes de dibujar
+            hold(app.UIAxes,'on')
+            plot(app.UIAxes, t, y, 'o', 'MarkerFaceColor','b', 'DisplayName','Datos experimentales')
+            plot(app.UIAxes, t, xa, '-r', 'LineWidth', 2, 'DisplayName','Modelo ajustado')
+            xlabel(app.UIAxes, 'Tiempo [días]')
+            ylabel(app.UIAxes, 'Biomasa [g/L]')
+            cepa = app.CepasdeKmarxianusDropDown.Value;
+                if app.ModeloSeleccionado == ""
+                    uialert(app.UIFigure,...
+                        'Favor de seleccionar un modelo antes de imprimir.',...
+                        'Modelo no seleccionado');
+                    return
+                end
+            
+                if app.IncluirTasadeMuerteCheckBox.Value
+                    muerteTxt = "con muerte";
+                else
+                    muerteTxt = "sin muerte";
+                end
+            
+                titulo = sprintf('%s - %s (%s)',...
+                    cepa, app.ModeloSeleccionado, muerteTxt);
+                title(app.UIAxes, titulo,...
+                    'FontSize',14, 'FontWeight','bold');
+            legend(app.UIAxes,'show','Location','southeast')
+            hold(app.UIAxes,'off')
+        end
+
+        % Button pushed function: CrecimientoGompertzsimplificadaButton
+        function CrecimientoGompertzsimplificadaButtonPushed(app, event)
+            app.ModeloSeleccionado = "Crecimiento Gompertz Simplificada";
+            
+            datos = app.CepasPromedio.(app.CepasdeKmarxianusDropDown.Value);
+            t = datos.t;
+            y = datos.y;
+
+            if app.IncluirTasadeMuerteCheckBox.Value
+                p0 = [10; 1; 0.001];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelGompertzSimplificadaconmuerte(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b;m]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemGompertzSimplificadaconmuerte(t, y(1), estimate);
+                app.mEditField.Enable = "on";
+                app.mEditField.Value = estimate(3);
+            else
+                p0 = [10; 1];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelGompertzSimplificada(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemGompertzSimplificada(t, y(1), estimate);
+                app.mEditField.Value = 0;
+                app.mEditField.Enable = "off";
+            end
+        
+            % Llenar los campos de la interfaz
+            Resultados(app, mdl)
+        
+            % Graficar resultados
+            cla(app.UIAxes)  % Limpiar la gráfica antes de dibujar
+            hold(app.UIAxes,'on')
+            plot(app.UIAxes, t, y, 'o', 'MarkerFaceColor','b', 'DisplayName','Datos experimentales')
+            plot(app.UIAxes, t, xa, '-r', 'LineWidth', 2, 'DisplayName','Modelo ajustado')
+            xlabel(app.UIAxes, 'Tiempo [días]')
+            ylabel(app.UIAxes, 'Biomasa [g/L]')
+            cepa = app.CepasdeKmarxianusDropDown.Value;
+                if app.ModeloSeleccionado == ""
+                    uialert(app.UIFigure,...
+                        'Favor de seleccionar un modelo antes de imprimir.',...
+                        'Modelo no seleccionado');
+                    return
+                end
+            
+                if app.IncluirTasadeMuerteCheckBox.Value
+                    muerteTxt = "con muerte";
+                else
+                    muerteTxt = "sin muerte";
+                end
+            
+                titulo = sprintf('%s - %s (%s)',...
+                    cepa, app.ModeloSeleccionado, muerteTxt);
+                title(app.UIAxes, titulo,...
+                    'FontSize',14, 'FontWeight','bold');
+            legend(app.UIAxes,'show','Location','southeast')
+            hold(app.UIAxes,'off')
+        end
+
+        % Button pushed function: AlomtricoesferaButton
+        function AlomtricoesferaButtonPushed(app, event)
+            app.ModeloSeleccionado = "Crecimiento Alometrico (Esfera)";
+            
+            datos = app.CepasPromedio.(app.CepasdeKmarxianusDropDown.Value);
+            t = datos.t;
+            y = datos.y;
+
+            if app.IncluirTasadeMuerteCheckBox.Value
+                p0 = [10; 1; 0.001];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelEsfera(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b;m]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemEsfera(t, y(1), estimate);
+                app.mEditField.Enable = "on";
+                app.mEditField.Value = estimate(2);
+            else
+                p0 = [10; 1];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelEsferasinmuerte(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemEsferasinmuerte(t, y(1), estimate);
+                app.mEditField.Value = 0;
+                app.mEditField.Enable = "off";
+            end
+        
+            % Llenar los campos de la interfaz
+            Resultados(app, mdl)
+        
+            % Graficar resultados
+            cla(app.UIAxes)  % Limpiar la gráfica antes de dibujar
+            hold(app.UIAxes,'on')
+            plot(app.UIAxes, t, y, 'o', 'MarkerFaceColor','b', 'DisplayName','Datos experimentales')
+            plot(app.UIAxes, t, xa, '-r', 'LineWidth', 2, 'DisplayName','Modelo ajustado')
+            xlabel(app.UIAxes, 'Tiempo [días]')
+            ylabel(app.UIAxes, 'Biomasa [g/L]')
+            cepa = app.CepasdeKmarxianusDropDown.Value;
+                if app.ModeloSeleccionado == ""
+                    uialert(app.UIFigure,...
+                        'Favor de seleccionar un modelo antes de imprimir.',...
+                        'Modelo no seleccionado');
+                    return
+                end
+            
+                if app.IncluirTasadeMuerteCheckBox.Value
+                    muerteTxt = "con muerte";
+                else
+                    muerteTxt = "sin muerte";
+                end
+            
+                titulo = sprintf('%s - %s (%s)',...
+                    cepa, app.ModeloSeleccionado, muerteTxt);
+                title(app.UIAxes, titulo,...
+                    'FontSize',14, 'FontWeight','bold');
+            legend(app.UIAxes,'show','Location','southeast')
+            hold(app.UIAxes,'off')
+        end
+
+        % Button pushed function: AlomtricofractalButton
+        function AlomtricofractalButtonPushed(app, event)
+            app.ModeloSeleccionado = "Crecimiento Alometrico (Fractal)";
+            
+            datos = app.CepasPromedio.(app.CepasdeKmarxianusDropDown.Value);
+            t = datos.t;
+            y = datos.y;
+
+            if app.IncluirTasadeMuerteCheckBox.Value
+                p0 = [10; 1; 0.001];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelFractal(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b;m]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemFractal(t, y(1), estimate);
+                app.mEditField.Enable = "on";
+                app.mEditField.Value = estimate(2);
+            else
+                p0 = [10; 1];
+                % Ajuste del modelo no lineal
+                mdl = app.fitting_modelFractalsinmuerte(t, y, p0);
+                estimate = mdl.Coefficients.Estimate;  % [a;b]
+                % Simulación del modelo con parámetros ajustados
+                xa = app.systemFractalsinmuerte(t, y(1), estimate);
+                app.mEditField.Value = 0;
+                app.mEditField.Enable = "off";
+            end
+        
+            % Llenar los campos de la interfaz
+            Resultados(app, mdl)
+        
+            % Graficar resultados
+            cla(app.UIAxes)  % Limpiar la gráfica antes de dibujar
+            hold(app.UIAxes,'on')
+            plot(app.UIAxes, t, y, 'o', 'MarkerFaceColor','b', 'DisplayName','Datos experimentales')
+            plot(app.UIAxes, t, xa, '-r', 'LineWidth', 2, 'DisplayName','Modelo ajustado')
+            xlabel(app.UIAxes, 'Tiempo [días]')
+            ylabel(app.UIAxes, 'Biomasa [g/L]')
+            cepa = app.CepasdeKmarxianusDropDown.Value;
+                if app.ModeloSeleccionado == ""
+                    uialert(app.UIFigure,...
+                        'Favor de seleccionar un modelo antes de imprimir.',...
+                        'Modelo no seleccionado');
+                    return
+                end
+            
+                if app.IncluirTasadeMuerteCheckBox.Value
+                    muerteTxt = "con muerte";
+                else
+                    muerteTxt = "sin muerte";
+                end
+            
+                titulo = sprintf('%s - %s (%s)',...
+                    cepa, app.ModeloSeleccionado, muerteTxt);
+                title(app.UIAxes, titulo,...
+                    'FontSize',14, 'FontWeight','bold');
+            legend(app.UIAxes,'show','Location','southeast')
+            hold(app.UIAxes,'off')
+        end
+
+        % Button pushed function: ImprimirResultadosButton
+        function ImprimirResultadosButtonPushed(app, event)
+    % Seleccionar carpeta
+    folder = uigetdir;
+    if folder == 0
+        return
+    end
+
+    titulo = app.UIAxes.Title.String;
+    tituloArchivo = titulo;
+    tituloArchivo = strrep(tituloArchivo,' ','_');
+    tituloArchivo = regexprep(tituloArchivo, '[\\/:*?"<>|()]','');
+    nombreGrafica = ['Grafica_' tituloArchivo '.png'];
+    nombreTabla = ['Tabla_' tituloArchivo '.pdf'];
+
+    % 1. Guardar gráfica en PNG
+    exportgraphics(app.UIAxes, ...
+        fullfile(folder,nombreGrafica), ...
+        'Resolution',300);
+
+    % 2. Preparar datos de la tabla
+    %    Filas: a, b, m
+    %    Columnas: estadísticos
+    rowNames = {'a','b','m'};
+
+    dataTable = {
+        app.fmt(app.aEditField.Value), ...
+        app.fmt(app.ErrorEstndarEditField.Value), ...
+        app.fmt(app.MargendeErrorEditField.Value), ...
+        app.fmt(app.CI95EditField.Value), ...
+        app.fmt(app.CI95EditField_2.Value), ...
+        app.fmt(app.ValorPEditField.Value);
+    
+        app.fmt(app.bEditField.Value), ...
+        app.fmt(app.ErrorEstndarEditField_2.Value), ...
+        app.fmt(app.MargendeErrorEditField_2.Value), ...
+        app.fmt(app.CI95EditField_3.Value), ...
+        app.fmt(app.CI95EditField_4.Value), ...
+        app.fmt(app.ValorPEditField_2.Value);
+    
+        app.fmt(app.mEditField.Value), ...
+        app.fmt(app.ErrorEstndarEditField_3.Value), ...
+        app.fmt(app.MargendeErrorEditField_3.Value), ...
+        app.fmt(app.CI95EditField_5.Value), ...
+        app.fmt(app.CI95EditField_6.Value), ...
+        app.fmt(app.ValorPEditField_3.Value)
+    };
+
+
+%    % 3. Crear figura con la tabla
+    figTable = uifigure( ...
+        'Visible','on', ...
+        'Position',[100 100 900 300], ...
+        'Name','Resultados estadísticos del modelo');
+
+    uitable(figTable, ...
+        'Data',dataTable, ...
+        'RowName',rowNames, ...
+        'ColumnName',{ ...
+            'Estimación', ...
+            'Error estándar', ...
+            'Margen de error', ...
+            'CI 95% inf', ...
+            'CI 95% sup', ...
+            'Valor p'}, ...
+        'FontSize',11, ...
+        'Units','normalized', ...
+        'Position',[0 0 1 1]);
+
+   drawnow
+
+    % 4. Exportar tabla a PDF
+   exportapp(figTable, ...
+       fullfile(folder,nombreTabla));
+
+    % 5. Cerrar figura
+    close(figTable)
+
+    % Confirmación
+    uialert(app.UIFigure, ...
+        {'Exportación completada correctamente:', ...
+         '• Gráfica: grafica_modelo.png', ...
+         '• Tabla: tabla_resultados.pdf'}, ...
+        'Exportación exitosa');
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Position = [100 100 1365 330];
+            app.UIFigure.Name = 'MATLAB App';
+
+            % Create GridLayout
+            app.GridLayout = uigridlayout(app.UIFigure);
+            app.GridLayout.ColumnWidth = {33, 85, 33, 202, '1.51x', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
+            app.GridLayout.RowHeight = {22, 22, 22, 22, 22, 22, 22, 22, 22, 22};
+
+            % Create UIAxes
+            app.UIAxes = uiaxes(app.GridLayout);
+            title(app.UIAxes, 'Aproximación')
+            xlabel(app.UIAxes, 'X')
+            ylabel(app.UIAxes, 'Y')
+            zlabel(app.UIAxes, 'Z')
+            app.UIAxes.Layout.Row = [1 10];
+            app.UIAxes.Layout.Column = [1 5];
+
+            % Create CrecimientoconmasaacumuladaButton
+            app.CrecimientoconmasaacumuladaButton = uibutton(app.GridLayout, 'push');
+            app.CrecimientoconmasaacumuladaButton.ButtonPushedFcn = createCallbackFcn(app, @CrecimientoconmasaacumuladaButtonPushed, true);
+            app.CrecimientoconmasaacumuladaButton.Layout.Row = 4;
+            app.CrecimientoconmasaacumuladaButton.Layout.Column = 6;
+            app.CrecimientoconmasaacumuladaButton.Text = 'Crecimiento con masa acumulada';
+
+            % Create AlomtricoesferaButton
+            app.AlomtricoesferaButton = uibutton(app.GridLayout, 'push');
+            app.AlomtricoesferaButton.ButtonPushedFcn = createCallbackFcn(app, @AlomtricoesferaButtonPushed, true);
+            app.AlomtricoesferaButton.Layout.Row = 7;
+            app.AlomtricoesferaButton.Layout.Column = 6;
+            app.AlomtricoesferaButton.Text = 'Alométrico (esfera)';
+
+            % Create CrecimientoGompertzsimplificadaButton
+            app.CrecimientoGompertzsimplificadaButton = uibutton(app.GridLayout, 'push');
+            app.CrecimientoGompertzsimplificadaButton.ButtonPushedFcn = createCallbackFcn(app, @CrecimientoGompertzsimplificadaButtonPushed, true);
+            app.CrecimientoGompertzsimplificadaButton.Layout.Row = 6;
+            app.CrecimientoGompertzsimplificadaButton.Layout.Column = 6;
+            app.CrecimientoGompertzsimplificadaButton.Text = 'Crecimiento Gompertz simplificada';
+
+            % Create CrecimientodeGompertzButton
+            app.CrecimientodeGompertzButton = uibutton(app.GridLayout, 'push');
+            app.CrecimientodeGompertzButton.ButtonPushedFcn = createCallbackFcn(app, @CrecimientodeGompertzButtonPushed, true);
+            app.CrecimientodeGompertzButton.Layout.Row = 5;
+            app.CrecimientodeGompertzButton.Layout.Column = 6;
+            app.CrecimientodeGompertzButton.Text = 'Crecimiento de Gompertz';
+
+            % Create CrecimientoLogsticoButton
+            app.CrecimientoLogsticoButton = uibutton(app.GridLayout, 'push');
+            app.CrecimientoLogsticoButton.ButtonPushedFcn = createCallbackFcn(app, @CrecimientoLogsticoButtonPushed, true);
+            app.CrecimientoLogsticoButton.Layout.Row = 3;
+            app.CrecimientoLogsticoButton.Layout.Column = 6;
+            app.CrecimientoLogsticoButton.Text = 'Crecimiento Logístico';
+
+            % Create AlomtricofractalButton
+            app.AlomtricofractalButton = uibutton(app.GridLayout, 'push');
+            app.AlomtricofractalButton.ButtonPushedFcn = createCallbackFcn(app, @AlomtricofractalButtonPushed, true);
+            app.AlomtricofractalButton.Layout.Row = 8;
+            app.AlomtricofractalButton.Layout.Column = 6;
+            app.AlomtricofractalButton.Text = 'Alométrico (fractal)';
+
+            % Create CepasdeKmarxianusDropDownLabel
+            app.CepasdeKmarxianusDropDownLabel = uilabel(app.GridLayout);
+            app.CepasdeKmarxianusDropDownLabel.HorizontalAlignment = 'right';
+            app.CepasdeKmarxianusDropDownLabel.Layout.Row = 1;
+            app.CepasdeKmarxianusDropDownLabel.Layout.Column = 6;
+            app.CepasdeKmarxianusDropDownLabel.Text = 'Cepas de K. marxianus';
+
+            % Create CepasdeKmarxianusDropDown
+            app.CepasdeKmarxianusDropDown = uidropdown(app.GridLayout);
+            app.CepasdeKmarxianusDropDown.Items = {'Seleccionar Cepa', 'CBS397', 'ITD002', 'ITD00157', 'ITD00268', 'CBS6556'};
+            app.CepasdeKmarxianusDropDown.ValueChangedFcn = createCallbackFcn(app, @CepasdeKmarxianusDropDownValueChanged, true);
+            app.CepasdeKmarxianusDropDown.Layout.Row = 2;
+            app.CepasdeKmarxianusDropDown.Layout.Column = 6;
+            app.CepasdeKmarxianusDropDown.Value = 'Seleccionar Cepa';
+
+            % Create aEditFieldLabel
+            app.aEditFieldLabel = uilabel(app.GridLayout);
+            app.aEditFieldLabel.HorizontalAlignment = 'right';
+            app.aEditFieldLabel.Layout.Row = 2;
+            app.aEditFieldLabel.Layout.Column = 7;
+            app.aEditFieldLabel.Text = 'a';
+
+            % Create aEditField
+            app.aEditField = uieditfield(app.GridLayout, 'numeric');
+            app.aEditField.Editable = 'off';
+            app.aEditField.Layout.Row = 3;
+            app.aEditField.Layout.Column = 7;
+
+            % Create ErrorEstndarEditFieldLabel
+            app.ErrorEstndarEditFieldLabel = uilabel(app.GridLayout);
+            app.ErrorEstndarEditFieldLabel.HorizontalAlignment = 'right';
+            app.ErrorEstndarEditFieldLabel.Layout.Row = 2;
+            app.ErrorEstndarEditFieldLabel.Layout.Column = 8;
+            app.ErrorEstndarEditFieldLabel.Text = 'Error Estándar';
+
+            % Create ErrorEstndarEditField
+            app.ErrorEstndarEditField = uieditfield(app.GridLayout, 'numeric');
+            app.ErrorEstndarEditField.Editable = 'off';
+            app.ErrorEstndarEditField.Layout.Row = 3;
+            app.ErrorEstndarEditField.Layout.Column = 8;
+
+            % Create MargendeErrorEditFieldLabel
+            app.MargendeErrorEditFieldLabel = uilabel(app.GridLayout);
+            app.MargendeErrorEditFieldLabel.HorizontalAlignment = 'right';
+            app.MargendeErrorEditFieldLabel.Layout.Row = 2;
+            app.MargendeErrorEditFieldLabel.Layout.Column = 9;
+            app.MargendeErrorEditFieldLabel.Text = 'Margen de Error';
+
+            % Create MargendeErrorEditField
+            app.MargendeErrorEditField = uieditfield(app.GridLayout, 'numeric');
+            app.MargendeErrorEditField.Editable = 'off';
+            app.MargendeErrorEditField.Layout.Row = 3;
+            app.MargendeErrorEditField.Layout.Column = 9;
+
+            % Create ValorPEditFieldLabel
+            app.ValorPEditFieldLabel = uilabel(app.GridLayout);
+            app.ValorPEditFieldLabel.HorizontalAlignment = 'right';
+            app.ValorPEditFieldLabel.Layout.Row = 2;
+            app.ValorPEditFieldLabel.Layout.Column = 12;
+            app.ValorPEditFieldLabel.Text = 'Valor P';
+
+            % Create ValorPEditField
+            app.ValorPEditField = uieditfield(app.GridLayout, 'numeric');
+            app.ValorPEditField.Editable = 'off';
+            app.ValorPEditField.Layout.Row = 3;
+            app.ValorPEditField.Layout.Column = 12;
+
+            % Create CI95Label
+            app.CI95Label = uilabel(app.GridLayout);
+            app.CI95Label.HorizontalAlignment = 'right';
+            app.CI95Label.Layout.Row = 2;
+            app.CI95Label.Layout.Column = 10;
+            app.CI95Label.Text = 'CI95↓';
+
+            % Create CI95EditField
+            app.CI95EditField = uieditfield(app.GridLayout, 'numeric');
+            app.CI95EditField.Editable = 'off';
+            app.CI95EditField.Layout.Row = 3;
+            app.CI95EditField.Layout.Column = 10;
+
+            % Create AICEditFieldLabel
+            app.AICEditFieldLabel = uilabel(app.GridLayout);
+            app.AICEditFieldLabel.HorizontalAlignment = 'right';
+            app.AICEditFieldLabel.Layout.Row = 8;
+            app.AICEditFieldLabel.Layout.Column = 11;
+            app.AICEditFieldLabel.Text = 'AIC';
+
+            % Create AICEditField
+            app.AICEditField = uieditfield(app.GridLayout, 'numeric');
+            app.AICEditField.Editable = 'off';
+            app.AICEditField.Layout.Row = 9;
+            app.AICEditField.Layout.Column = 11;
+
+            % Create RCuadradaEditFieldLabel
+            app.RCuadradaEditFieldLabel = uilabel(app.GridLayout);
+            app.RCuadradaEditFieldLabel.HorizontalAlignment = 'right';
+            app.RCuadradaEditFieldLabel.Layout.Row = 8;
+            app.RCuadradaEditFieldLabel.Layout.Column = 12;
+            app.RCuadradaEditFieldLabel.Text = 'R-Cuadrada';
+
+            % Create RCuadradaEditField
+            app.RCuadradaEditField = uieditfield(app.GridLayout, 'numeric');
+            app.RCuadradaEditField.Editable = 'off';
+            app.RCuadradaEditField.Layout.Row = 9;
+            app.RCuadradaEditField.Layout.Column = 12;
+
+            % Create mEditFieldLabel
+            app.mEditFieldLabel = uilabel(app.GridLayout);
+            app.mEditFieldLabel.HorizontalAlignment = 'right';
+            app.mEditFieldLabel.Layout.Row = 6;
+            app.mEditFieldLabel.Layout.Column = 7;
+            app.mEditFieldLabel.Text = 'm';
+
+            % Create mEditField
+            app.mEditField = uieditfield(app.GridLayout, 'numeric');
+            app.mEditField.Editable = 'off';
+            app.mEditField.Layout.Row = 7;
+            app.mEditField.Layout.Column = 7;
+
+            % Create CI95Label_2
+            app.CI95Label_2 = uilabel(app.GridLayout);
+            app.CI95Label_2.HorizontalAlignment = 'right';
+            app.CI95Label_2.Layout.Row = 2;
+            app.CI95Label_2.Layout.Column = 11;
+            app.CI95Label_2.Text = 'CI95↑';
+
+            % Create CI95EditField_2
+            app.CI95EditField_2 = uieditfield(app.GridLayout, 'numeric');
+            app.CI95EditField_2.Editable = 'off';
+            app.CI95EditField_2.Layout.Row = 3;
+            app.CI95EditField_2.Layout.Column = 11;
+
+            % Create bEditFieldLabel
+            app.bEditFieldLabel = uilabel(app.GridLayout);
+            app.bEditFieldLabel.HorizontalAlignment = 'right';
+            app.bEditFieldLabel.Layout.Row = 4;
+            app.bEditFieldLabel.Layout.Column = 7;
+            app.bEditFieldLabel.Text = 'b';
+
+            % Create bEditField
+            app.bEditField = uieditfield(app.GridLayout, 'numeric');
+            app.bEditField.Editable = 'off';
+            app.bEditField.Layout.Row = 5;
+            app.bEditField.Layout.Column = 7;
+
+            % Create ImprimirResultadosButton
+            app.ImprimirResultadosButton = uibutton(app.GridLayout, 'push');
+            app.ImprimirResultadosButton.ButtonPushedFcn = createCallbackFcn(app, @ImprimirResultadosButtonPushed, true);
+            app.ImprimirResultadosButton.Layout.Row = 10;
+            app.ImprimirResultadosButton.Layout.Column = 6;
+            app.ImprimirResultadosButton.Text = 'Imprimir Resultados';
+
+            % Create IncluirTasadeMuerteCheckBox
+            app.IncluirTasadeMuerteCheckBox = uicheckbox(app.GridLayout);
+            app.IncluirTasadeMuerteCheckBox.Text = 'Incluir Tasa de Muerte';
+            app.IncluirTasadeMuerteCheckBox.Layout.Row = 9;
+            app.IncluirTasadeMuerteCheckBox.Layout.Column = 6;
+
+            % Create ErrorEstndarEditField_2Label
+            app.ErrorEstndarEditField_2Label = uilabel(app.GridLayout);
+            app.ErrorEstndarEditField_2Label.HorizontalAlignment = 'right';
+            app.ErrorEstndarEditField_2Label.Layout.Row = 4;
+            app.ErrorEstndarEditField_2Label.Layout.Column = 8;
+            app.ErrorEstndarEditField_2Label.Text = 'Error Estándar';
+
+            % Create ErrorEstndarEditField_2
+            app.ErrorEstndarEditField_2 = uieditfield(app.GridLayout, 'numeric');
+            app.ErrorEstndarEditField_2.Editable = 'off';
+            app.ErrorEstndarEditField_2.Layout.Row = 5;
+            app.ErrorEstndarEditField_2.Layout.Column = 8;
+
+            % Create ErrorEstndarEditField_3Label
+            app.ErrorEstndarEditField_3Label = uilabel(app.GridLayout);
+            app.ErrorEstndarEditField_3Label.HorizontalAlignment = 'right';
+            app.ErrorEstndarEditField_3Label.Layout.Row = 6;
+            app.ErrorEstndarEditField_3Label.Layout.Column = 8;
+            app.ErrorEstndarEditField_3Label.Text = 'Error Estándar';
+
+            % Create ErrorEstndarEditField_3
+            app.ErrorEstndarEditField_3 = uieditfield(app.GridLayout, 'numeric');
+            app.ErrorEstndarEditField_3.Editable = 'off';
+            app.ErrorEstndarEditField_3.Layout.Row = 7;
+            app.ErrorEstndarEditField_3.Layout.Column = 8;
+
+            % Create ValorPEditField_2Label
+            app.ValorPEditField_2Label = uilabel(app.GridLayout);
+            app.ValorPEditField_2Label.HorizontalAlignment = 'right';
+            app.ValorPEditField_2Label.Layout.Row = 4;
+            app.ValorPEditField_2Label.Layout.Column = 12;
+            app.ValorPEditField_2Label.Text = 'Valor P';
+
+            % Create ValorPEditField_2
+            app.ValorPEditField_2 = uieditfield(app.GridLayout, 'numeric');
+            app.ValorPEditField_2.Editable = 'off';
+            app.ValorPEditField_2.Layout.Row = 5;
+            app.ValorPEditField_2.Layout.Column = 12;
+
+            % Create ValorPEditField_3Label
+            app.ValorPEditField_3Label = uilabel(app.GridLayout);
+            app.ValorPEditField_3Label.HorizontalAlignment = 'right';
+            app.ValorPEditField_3Label.Layout.Row = 6;
+            app.ValorPEditField_3Label.Layout.Column = 12;
+            app.ValorPEditField_3Label.Text = 'Valor P';
+
+            % Create ValorPEditField_3
+            app.ValorPEditField_3 = uieditfield(app.GridLayout, 'numeric');
+            app.ValorPEditField_3.Editable = 'off';
+            app.ValorPEditField_3.Layout.Row = 7;
+            app.ValorPEditField_3.Layout.Column = 12;
+
+            % Create MargendeErrorEditField_2Label
+            app.MargendeErrorEditField_2Label = uilabel(app.GridLayout);
+            app.MargendeErrorEditField_2Label.HorizontalAlignment = 'right';
+            app.MargendeErrorEditField_2Label.Layout.Row = 4;
+            app.MargendeErrorEditField_2Label.Layout.Column = 9;
+            app.MargendeErrorEditField_2Label.Text = 'Margen de Error';
+
+            % Create MargendeErrorEditField_2
+            app.MargendeErrorEditField_2 = uieditfield(app.GridLayout, 'numeric');
+            app.MargendeErrorEditField_2.Editable = 'off';
+            app.MargendeErrorEditField_2.Layout.Row = 5;
+            app.MargendeErrorEditField_2.Layout.Column = 9;
+
+            % Create MargendeErrorEditField_3Label
+            app.MargendeErrorEditField_3Label = uilabel(app.GridLayout);
+            app.MargendeErrorEditField_3Label.HorizontalAlignment = 'right';
+            app.MargendeErrorEditField_3Label.Layout.Row = 6;
+            app.MargendeErrorEditField_3Label.Layout.Column = 9;
+            app.MargendeErrorEditField_3Label.Text = 'Margen de Error';
+
+            % Create MargendeErrorEditField_3
+            app.MargendeErrorEditField_3 = uieditfield(app.GridLayout, 'numeric');
+            app.MargendeErrorEditField_3.Editable = 'off';
+            app.MargendeErrorEditField_3.Layout.Row = 7;
+            app.MargendeErrorEditField_3.Layout.Column = 9;
+
+            % Create CI95EditField_3Label
+            app.CI95EditField_3Label = uilabel(app.GridLayout);
+            app.CI95EditField_3Label.HorizontalAlignment = 'right';
+            app.CI95EditField_3Label.Layout.Row = 4;
+            app.CI95EditField_3Label.Layout.Column = 10;
+            app.CI95EditField_3Label.Text = 'CI95↓';
+
+            % Create CI95EditField_3
+            app.CI95EditField_3 = uieditfield(app.GridLayout, 'numeric');
+            app.CI95EditField_3.Editable = 'off';
+            app.CI95EditField_3.Layout.Row = 5;
+            app.CI95EditField_3.Layout.Column = 10;
+
+            % Create CI95Label_3
+            app.CI95Label_3 = uilabel(app.GridLayout);
+            app.CI95Label_3.HorizontalAlignment = 'right';
+            app.CI95Label_3.Layout.Row = 4;
+            app.CI95Label_3.Layout.Column = 11;
+            app.CI95Label_3.Text = 'CI95↑';
+
+            % Create CI95EditField_4
+            app.CI95EditField_4 = uieditfield(app.GridLayout, 'numeric');
+            app.CI95EditField_4.Editable = 'off';
+            app.CI95EditField_4.Layout.Row = 5;
+            app.CI95EditField_4.Layout.Column = 11;
+
+            % Create CI95Label_4
+            app.CI95Label_4 = uilabel(app.GridLayout);
+            app.CI95Label_4.HorizontalAlignment = 'right';
+            app.CI95Label_4.Layout.Row = 6;
+            app.CI95Label_4.Layout.Column = 10;
+            app.CI95Label_4.Text = 'CI95↓';
+
+            % Create CI95EditField_5
+            app.CI95EditField_5 = uieditfield(app.GridLayout, 'numeric');
+            app.CI95EditField_5.Editable = 'off';
+            app.CI95EditField_5.Layout.Row = 7;
+            app.CI95EditField_5.Layout.Column = 10;
+
+            % Create CI95EditField_6Label
+            app.CI95EditField_6Label = uilabel(app.GridLayout);
+            app.CI95EditField_6Label.HorizontalAlignment = 'right';
+            app.CI95EditField_6Label.Layout.Row = 6;
+            app.CI95EditField_6Label.Layout.Column = 11;
+            app.CI95EditField_6Label.Text = 'CI95↑';
+
+            % Create CI95EditField_6
+            app.CI95EditField_6 = uieditfield(app.GridLayout, 'numeric');
+            app.CI95EditField_6.Editable = 'off';
+            app.CI95EditField_6.Layout.Row = 7;
+            app.CI95EditField_6.Layout.Column = 11;
+
+            % Create ValortstudentEditFieldLabel
+            app.ValortstudentEditFieldLabel = uilabel(app.GridLayout);
+            app.ValortstudentEditFieldLabel.HorizontalAlignment = 'right';
+            app.ValortstudentEditFieldLabel.Layout.Row = 8;
+            app.ValortstudentEditFieldLabel.Layout.Column = 7;
+            app.ValortstudentEditFieldLabel.Text = 'Valor t-student';
+
+            % Create ValortstudentEditField
+            app.ValortstudentEditField = uieditfield(app.GridLayout, 'numeric');
+            app.ValortstudentEditField.Editable = 'off';
+            app.ValortstudentEditField.Layout.Row = 9;
+            app.ValortstudentEditField.Layout.Column = 7;
+
+            % Create GradosdeLibertadEditFieldLabel
+            app.GradosdeLibertadEditFieldLabel = uilabel(app.GridLayout);
+            app.GradosdeLibertadEditFieldLabel.HorizontalAlignment = 'right';
+            app.GradosdeLibertadEditFieldLabel.Layout.Row = 8;
+            app.GradosdeLibertadEditFieldLabel.Layout.Column = 8;
+            app.GradosdeLibertadEditFieldLabel.Text = 'Grados de Libertad';
+
+            % Create GradosdeLibertadEditField
+            app.GradosdeLibertadEditField = uieditfield(app.GridLayout, 'numeric');
+            app.GradosdeLibertadEditField.Editable = 'off';
+            app.GradosdeLibertadEditField.Layout.Row = 9;
+            app.GradosdeLibertadEditField.Layout.Column = 8;
+
+            % Create ValorAlphaEditFieldLabel
+            app.ValorAlphaEditFieldLabel = uilabel(app.GridLayout);
+            app.ValorAlphaEditFieldLabel.HorizontalAlignment = 'right';
+            app.ValorAlphaEditFieldLabel.Layout.Row = 8;
+            app.ValorAlphaEditFieldLabel.Layout.Column = 9;
+            app.ValorAlphaEditFieldLabel.Text = 'Valor Alpha';
+
+            % Create ValorAlphaEditField
+            app.ValorAlphaEditField = uieditfield(app.GridLayout, 'numeric');
+            app.ValorAlphaEditField.Editable = 'off';
+            app.ValorAlphaEditField.Layout.Row = 9;
+            app.ValorAlphaEditField.Layout.Column = 9;
+
+            % Create RSSEditFieldLabel
+            app.RSSEditFieldLabel = uilabel(app.GridLayout);
+            app.RSSEditFieldLabel.HorizontalAlignment = 'right';
+            app.RSSEditFieldLabel.Layout.Row = 8;
+            app.RSSEditFieldLabel.Layout.Column = 10;
+            app.RSSEditFieldLabel.Text = 'RSS';
+
+            % Create RSSEditField
+            app.RSSEditField = uieditfield(app.GridLayout, 'numeric');
+            app.RSSEditField.Editable = 'off';
+            app.RSSEditField.Layout.Row = 9;
+            app.RSSEditField.Layout.Column = 10;
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = Proyecto_Final
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
